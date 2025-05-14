@@ -249,8 +249,22 @@ function ExtrapolationChartModal({
   if (!open) return null;
 
   // Generate heights for plotting (linear scale)
-  const minH = Math.max(0, Math.min(...data.map(d => d.height)));
-  const maxH = 100000;
+  const tableHeights = data.map(d => d.height);
+  let minH = Math.min(...tableHeights);
+  let maxH = Math.max(...tableHeights);
+
+  // Expand min/max for x axis (so points aren't at the very edge)
+  if (minH === maxH) {
+    minH -= 1;
+    maxH += 1;
+  } else {
+    const padH = (maxH - minH) * 0.15;
+    minH -= padH;
+    maxH += padH;
+    if (minH < 0) minH = 0;
+  }
+
+  // Generate heights for plotting (linear scale) using new minH/maxH
   const points = [];
   for (let i = 0; i <= 30; ++i) {
     const h = minH + (maxH - minH) * (i / 30);
@@ -261,18 +275,28 @@ function ExtrapolationChartModal({
     });
   }
 
-  // Find max depth for scaling
-  const maxDepth = Math.max(
-    ...points.map(p => Math.max(p.power, p.linear)),
-    ...data.map(d => d.depth)
-  );
+  // Find min/max depth from table values only
+  const tableDepths = data.map(d => d.depth);
+  let minDepth = Math.min(...tableDepths);
+  let maxDepth = Math.max(...tableDepths);
+
+  // Expand min/max a bit for padding (so points aren't at the very edge)
+  if (minDepth === maxDepth) {
+    minDepth -= 1;
+    maxDepth += 1;
+  } else {
+    const pad = (maxDepth - minDepth) * 0.15;
+    minDepth -= pad;
+    maxDepth += pad;
+    if (minDepth < 0) minDepth = 0;
+  }
 
   // SVG chart dimensions
   const width = 500, height = 320, pad = 50;
   const xScale = (h: number) =>
     pad + ((h - minH) / (maxH - minH)) * (width - 2 * pad);
   const yScale = (d: number) =>
-    height - pad - ((d - 0) / (maxDepth - 0)) * (height - 2 * pad);
+    height - pad - ((d - minDepth) / (maxDepth - minDepth)) * (height - 2 * pad);
 
   return (
     <div style={{
@@ -303,13 +327,13 @@ function ExtrapolationChartModal({
           <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#888" />
           <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="#888" />
           {/* Axis labels */}
-          <text x={width / 2} y={height - 10} textAnchor="middle" fontSize={14}>Height (m, linear scale)</text>
-          <text x={20} y={pad - 20} textAnchor="start" fontSize={14} transform={`rotate(-90,20,${pad - 20})`}>Depth (cm, linear scale)</text>
-          {/* Data points */}
+          <text x={width / 2} y={height - 10} textAnchor="middle" fontSize={14}>Height (m)</text>
+          <text x={-20} y={pad -50} textAnchor="start" fontSize={14} transform={`rotate(-90,90,${pad + 10})`}>Depth (cm)</text>
+          {/* Data points (table values only) */}
           {data.map((d, i) => (
             <circle key={i} cx={xScale(d.height)} cy={yScale(d.depth)} r={4} fill="#222" />
           ))}
-          {/* Power law line */}
+          {/* Power law (curved) line */}
           <polyline
             fill="none"
             stroke="#2a7fff"
@@ -324,16 +348,16 @@ function ExtrapolationChartModal({
             points={points.map(p => `${xScale(p.h)},${yScale(p.linear)}`).join(' ')}
           />
           {/* Legend */}
-          <rect x={width - pad - 120} y={pad} width={110} height={44} fill="#fff" stroke="#ccc" />
-          <circle cx={width - pad - 110} cy={pad + 16} r={4} fill="#222" />
-          <text x={width - pad - 100} y={pad + 20} fontSize={13}>Data</text>
-          <line x1={width - pad - 110} y1={pad + 30} x2={width - pad - 100} y2={pad + 30} stroke="#2a7fff" strokeWidth={3} />
-          <text x={width - pad - 95} y={pad + 34} fontSize={13}>Power law</text>
-          <line x1={width - pad - 110} y1={pad + 42} x2={width - pad - 100} y2={pad + 42} stroke="#ffb347" strokeWidth={3} />
-          <text x={width - pad - 95} y={pad + 46} fontSize={13}>Linear</text>
+          <rect x={width - pad - 300} y={pad} width={110} height={60} fill="#fff" stroke="#ccc" />
+          <circle cx={width - pad - 290} cy={pad + 16} r={4} fill="#222" />
+          <text x={width - pad - 280} y={pad + 20} fontSize={13}>Data</text>
+          <line x1={width - pad - 290} y1={pad + 30} x2={width - pad - 270} y2={pad + 30} stroke="#2a7fff" strokeWidth={3} />
+          <text x={width - pad - 265} y={pad + 34} fontSize={13}>Curved</text>
+          <line x1={width - pad - 290} y1={pad + 42} x2={width - pad - 270} y2={pad + 42} stroke="#ffb347" strokeWidth={3} />
+          <text x={width - pad - 265} y={pad + 46} fontSize={13}>Linear</text>
         </svg>
         <div style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
-          <b>Note:</b> Both axes are linear. Blue = power law fit, orange = linear fit, black dots = your data.
+          <b>Note:</b> Blue = curved line fit, orange = linear fit, black dots = your data.
         </div>
         {/* Optional close button at bottom for accessibility */}
         <div style={{ textAlign: 'center', marginTop: 16 }}>
