@@ -3,9 +3,24 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
+import React from 'react';
 
 // Earth sphere with a crater (hemisphere subtraction illusion)
-function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDepth: number; craterRadius: number; showCrater: boolean }) {
+function EarthWithCrater({
+  craterDepth,
+  craterRadius,
+  showCrater,
+  craterDepthLinear,
+  craterRadiusLinear,
+  fitType,
+}: {
+  craterDepth: number;
+  craterRadius: number;
+  showCrater: boolean;
+  craterDepthLinear: number;
+  craterRadiusLinear: number;
+  fitType: 'power' | 'linear';
+}) {
   const earthRadius = 2;
   // Use Earth's real diameter for clamping
   // Earth's actual diameter in meters: 12742 km = 12,742,000 m
@@ -14,8 +29,12 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
   const earthDiameterMeters = 12742000;
   const sceneUnitToMeters = earthDiameterMeters / (2 * earthRadius); // 1 scene unit = 3,185,500 m
   const maxCrater = (earthDiameterMeters * 10) / sceneUnitToMeters; // 4x diameter in scene units
-  const depth = Math.max(0.01, Math.min(craterDepth / 100, maxCrater));
-  const radius = Math.max(0.01, Math.min(craterRadius, maxCrater));
+  // Power law crater
+  const depthPower = Math.max(0.01, Math.min(craterDepth / 100, maxCrater));
+  const radiusPower = Math.max(0.01, Math.min(craterRadius, maxCrater));
+  // Linear crater
+  const depthLinear = Math.max(0.01, Math.min(craterDepthLinear / 100, maxCrater));
+  const radiusLinear = Math.max(0.01, Math.min(craterRadiusLinear, maxCrater));
 
   // Double-ended arrow for Earth's diameter (to the left of the sphere)
   function Arrow({ start, end, color }: { start: [number, number, number]; end: [number, number, number]; color: string }) {
@@ -51,13 +70,21 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
     );
   }
 
-  // Full hemisphere for the crater
-  const fullHemisphereGeometry = useMemo(() => {
-    const geo = new THREE.SphereGeometry(radius, 64, 64, 0, 2 * Math.PI, 0, Math.PI / 1);
+  // Power law hemisphere
+  const fullHemisphereGeometryPower = useMemo(() => {
+    const geo = new THREE.SphereGeometry(radiusPower, 64, 64, 0, 2 * Math.PI, 0, Math.PI / 1);
     geo.rotateX(Math.PI);
-    geo.translate(0, earthRadius - depth, 0);
+    geo.translate(0, earthRadius - depthPower, 0);
     return geo;
-  }, [radius, depth]);
+  }, [radiusPower, depthPower]);
+
+  // Linear hemisphere
+  const fullHemisphereGeometryLinear = useMemo(() => {
+    const geo = new THREE.SphereGeometry(radiusLinear, 64, 64, 0, 2 * Math.PI, 0, Math.PI / 1);
+    geo.rotateX(Math.PI);
+    geo.translate(0, earthRadius - depthLinear, 0);
+    return geo;
+  }, [radiusLinear, depthLinear]);
 
   // Ref for custom shader material
   const craterMatRef = useRef<any>(null);
@@ -76,7 +103,7 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
       };
       craterMatRef.current.needsUpdate = true;
     }
-  }, [radius, depth]);
+  }, [radiusPower, depthPower, radiusLinear, depthLinear]);
 
   return (
     <group>
@@ -106,9 +133,14 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
         <meshPhysicalMaterial color="#2a7fff" transparent opacity={0.5} roughness={0.3} metalness={0.1} transmission={0.7} thickness={0.5} />
       </mesh>
       {/* Crater (hemisphere, clipped to earth) */}
-      {showCrater && (
-        <mesh geometry={fullHemisphereGeometry}>
+      {showCrater && fitType === 'power' && (
+        <mesh geometry={fullHemisphereGeometryPower}>
           <meshStandardMaterial ref={craterMatRef} color="#222" roughness={1} metalness={0} side={THREE.DoubleSide} />
+        </mesh>
+      )}
+      {showCrater && fitType === 'linear' && (
+        <mesh geometry={fullHemisphereGeometryLinear}>
+          <meshStandardMaterial ref={craterMatRef} color="#a0522d" roughness={1} metalness={0} side={THREE.DoubleSide} />
         </mesh>
       )}
     </group>
@@ -176,6 +208,155 @@ function extrapolateRadius(data: { height: number; depth: number }[], targetHeig
   return Math.max(0.2, avgK * Math.sqrt(predictedDepth));
 }
 
+function extrapolateDepthLinear(data: { height: number; depth: number }[], targetHeight: number) {
+  if (data.length < 2) return 0;
+  // Linear regression: depth = a * height + b
+  const n = data.length;
+  const sumX = data.reduce((a, b) => a + b.height, 0);
+  const sumY = data.reduce((a, b) => a + b.depth, 0);
+  const sumXX = data.reduce((a, b) => a + b.height * b.height, 0);
+  const sumXY = data.reduce((a, b) => a + b.height * b.depth, 0);
+  const slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / n;
+  return slope * targetHeight + intercept;
+}
+
+function extrapolateRadiusLinear(data: { height: number; depth: number }[], targetHeight: number) {
+  if (data.length < 2) return 0.7;
+  // Use the linear predicted depth
+  const predictedDepth = extrapolateDepthLinear(data, targetHeight);
+  // Use the same scaling as power, but with linear depth
+  const radii = data.map(({ depth }) => Math.sqrt(depth));
+  const avgK = radii.reduce((a, b) => a + b, 0) / radii.length;
+  return Math.max(0.2, avgK * Math.sqrt(predictedDepth));
+}
+
+// --- Popup Chart Modal ---
+function ExtrapolationChartModal({
+  open,
+  onClose,
+  data,
+  extrapolateDepth,
+  extrapolateDepthLinear,
+}: {
+  open: boolean;
+  onClose: () => void;
+  data: { height: number; depth: number }[];
+  extrapolateDepth: (data: { height: number; depth: number }[], h: number) => number;
+  extrapolateDepthLinear: (data: { height: number; depth: number }[], h: number) => number;
+}) {
+  if (!open) return null;
+
+  // Generate heights for plotting (linear scale)
+  const minH = Math.max(0, Math.min(...data.map(d => d.height)));
+  const maxH = 100000;
+  const points = [];
+  for (let i = 0; i <= 30; ++i) {
+    const h = minH + (maxH - minH) * (i / 30);
+    points.push({
+      h,
+      power: extrapolateDepth(data, h),
+      linear: extrapolateDepthLinear(data, h),
+    });
+  }
+
+  // Find max depth for scaling
+  const maxDepth = Math.max(
+    ...points.map(p => Math.max(p.power, p.linear)),
+    ...data.map(d => d.depth)
+  );
+
+  // SVG chart dimensions
+  const width = 500, height = 320, pad = 50;
+  const xScale = (h: number) =>
+    pad + ((h - minH) / (maxH - minH)) * (width - 2 * pad);
+  const yScale = (d: number) =>
+    height - pad - ((d - 0) / (maxDepth - 0)) * (height - 2 * pad);
+
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh',
+      background: 'rgba(0,0,0,0.4)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center'
+    }}>
+      <div style={{ background: '#fff', borderRadius: 8, padding: 24, minWidth: 540, boxShadow: '0 2px 16px #0005', position: 'relative' }}>
+        {/* Close button in top right */}
+        <button
+          onClick={onClose}
+          style={{
+            position: 'absolute',
+            right: 12,
+            top: 12,
+            fontSize: 24,
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: '#222',
+            fontWeight: 'bold',
+            lineHeight: 1,
+          }}
+          aria-label="Close"
+        >×</button>
+        <h3 style={{ marginTop: 0, color: '#000' }}>Extrapolated Depth vs Height</h3>
+        <svg width={width} height={height} style={{ background: '#f8f8f8', borderRadius: 6 }}>
+          {/* Axes */}
+          <line x1={pad} y1={height - pad} x2={width - pad} y2={height - pad} stroke="#888" />
+          <line x1={pad} y1={pad} x2={pad} y2={height - pad} stroke="#888" />
+          {/* Axis labels */}
+          <text x={width / 2} y={height - 10} textAnchor="middle" fontSize={14}>Height (m, linear scale)</text>
+          <text x={20} y={pad - 20} textAnchor="start" fontSize={14} transform={`rotate(-90,20,${pad - 20})`}>Depth (cm, linear scale)</text>
+          {/* Data points */}
+          {data.map((d, i) => (
+            <circle key={i} cx={xScale(d.height)} cy={yScale(d.depth)} r={4} fill="#222" />
+          ))}
+          {/* Power law line */}
+          <polyline
+            fill="none"
+            stroke="#2a7fff"
+            strokeWidth={2}
+            points={points.map(p => `${xScale(p.h)},${yScale(p.power)}`).join(' ')}
+          />
+          {/* Linear law line */}
+          <polyline
+            fill="none"
+            stroke="#ffb347"
+            strokeWidth={2}
+            points={points.map(p => `${xScale(p.h)},${yScale(p.linear)}`).join(' ')}
+          />
+          {/* Legend */}
+          <rect x={width - pad - 120} y={pad} width={110} height={44} fill="#fff" stroke="#ccc" />
+          <circle cx={width - pad - 110} cy={pad + 16} r={4} fill="#222" />
+          <text x={width - pad - 100} y={pad + 20} fontSize={13}>Data</text>
+          <line x1={width - pad - 110} y1={pad + 30} x2={width - pad - 100} y2={pad + 30} stroke="#2a7fff" strokeWidth={3} />
+          <text x={width - pad - 95} y={pad + 34} fontSize={13}>Power law</text>
+          <line x1={width - pad - 110} y1={pad + 42} x2={width - pad - 100} y2={pad + 42} stroke="#ffb347" strokeWidth={3} />
+          <text x={width - pad - 95} y={pad + 46} fontSize={13}>Linear</text>
+        </svg>
+        <div style={{ fontSize: 13, color: '#666', marginTop: 8 }}>
+          <b>Note:</b> Both axes are linear. Blue = power law fit, orange = linear fit, black dots = your data.
+        </div>
+        {/* Optional close button at bottom for accessibility */}
+        <div style={{ textAlign: 'center', marginTop: 16 }}>
+          <button
+            onClick={onClose}
+            style={{
+              background: '#a0522d',
+              color: '#fff',
+              border: 'none',
+              borderRadius: 4,
+              padding: '0.4rem 1.2rem',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              fontSize: 16,
+            }}
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [data, setData] = useState([
     { height: 0.2, depth: 0.2 },
@@ -185,14 +366,63 @@ function App() {
   const [animate, setAnimate] = useState(false);
   const [showCrater, setShowCrater] = useState(false);
   const [resetKey, setResetKey] = useState(0);
+  const [fitType, setFitType] = useState<'power' | 'linear'>('power');
+  const [showChart, setShowChart] = useState(false);
   const atmosphereHeight = 100000; // meters (100 km)
-  const extrapolated = extrapolateDepth(data, atmosphereHeight);
-  const craterRadius = extrapolateRadius(data, atmosphereHeight); // for visualization
+
+  // Choose extrapolation method
+  const extrapolated =
+    fitType === 'power'
+      ? extrapolateDepth(data, atmosphereHeight)
+      : extrapolateDepthLinear(data, atmosphereHeight);
+
+  const craterRadius =
+    fitType === 'power'
+      ? extrapolateRadius(data, atmosphereHeight)
+      : extrapolateRadiusLinear(data, atmosphereHeight);
+
+  // Always compute both for visualization
+  const extrapolatedPower = extrapolateDepth(data, atmosphereHeight);
+  const craterRadiusPower = extrapolateRadius(data, atmosphereHeight);
+  const extrapolatedLinear = extrapolateDepthLinear(data, atmosphereHeight);
+  const craterRadiusLinear = extrapolateRadiusLinear(data, atmosphereHeight);
 
   return (
     <div className="container">
       <h1>Émilie du Châtelet Impact Extrapolator</h1>
       <p>Input your experimental data below (height in meters, depth in cm):</p>
+      {/* Fit type toggle buttons */}
+      <div style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setFitType('power')}
+          style={{
+            background: fitType === 'power' ? '#ffb347' : '#a0522d',
+            color: fitType === 'power' ? '#222' : '#fff',
+            fontWeight: fitType === 'power' ? 'bold' : 'normal',
+            marginRight: 8,
+            border: 'none',
+            borderRadius: 4,
+            padding: '0.4rem 1rem',
+            cursor: 'pointer',
+          }}
+        >
+          Curved Line
+        </button>
+        <button
+          onClick={() => setFitType('linear')}
+          style={{
+            background: fitType === 'linear' ? '#ffb347' : '#a0522d',
+            color: fitType === 'linear' ? '#222' : '#fff',
+            fontWeight: fitType === 'linear' ? 'bold' : 'normal',
+            border: 'none',
+            borderRadius: 4,
+            padding: '0.4rem 1rem',
+            cursor: 'pointer',
+          }}
+        >
+          Straight Line
+        </button>
+      </div>
       <table>
         <thead>
           <tr>
@@ -283,6 +513,23 @@ function App() {
           </tr>
         </tbody>
       </table>
+      <div style={{ margin: '16px 0' }}>
+        <button
+          onClick={() => setShowChart(true)}
+          style={{
+            background: '#2a7fff',
+            color: '#fff',
+            border: 'none',
+            borderRadius: 4,
+            padding: '0.4rem 1.2rem',
+            fontWeight: 'bold',
+            cursor: 'pointer',
+            fontSize: 16,
+          }}
+        >
+          Show Extrapolation Plot
+        </button>
+      </div>
       <h2>Extrapolated Impact from Edge of Atmosphere (100 km)</h2>
       <p>
         Estimated crater depth: <b>{(extrapolated / 100000).toFixed(3)} km</b>
@@ -291,7 +538,14 @@ function App() {
         <Canvas camera={{ position: [0, 6, 24], fov: 50 }} shadows>
           <ambientLight intensity={0.7} />
           <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
-          <EarthWithCrater craterDepth={extrapolated} craterRadius={craterRadius} showCrater={showCrater} />
+          <EarthWithCrater
+            craterDepth={extrapolatedPower}
+            craterRadius={craterRadiusPower}
+            craterDepthLinear={extrapolatedLinear}
+            craterRadiusLinear={craterRadiusLinear}
+            showCrater={showCrater}
+            fitType={fitType}
+          />
           <Meteor animate={animate && !showCrater} onImpact={() => setShowCrater(true)} resetKey={resetKey} />
           <OrbitControls enablePan enableZoom enableRotate />
         </Canvas>
@@ -304,6 +558,13 @@ function App() {
           </button>
         </div>
       </div>
+      <ExtrapolationChartModal
+        open={showChart}
+        onClose={() => setShowChart(false)}
+        data={data}
+        extrapolateDepth={extrapolateDepth}
+        extrapolateDepthLinear={extrapolateDepthLinear}
+      />
       <p style={{ fontSize: '0.9em', color: '#888', marginTop: 80 }}>
         This extrapolation uses a power law fit to your data. For demonstration only.
       </p>
