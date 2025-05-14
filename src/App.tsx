@@ -88,8 +88,8 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
           color="#ffb347"
         />
         <Text
-          position={[-3.5, 0, 0]}
-          fontSize={0.5}
+          position={[-3.85, 0, 0]}
+          fontSize={0.75}
           color="#ffb347"
           anchorX="center"
           anchorY="middle"
@@ -178,8 +178,8 @@ function extrapolateRadius(data: { height: number; depth: number }[], targetHeig
 
 function App() {
   const [data, setData] = useState([
-    { height: 1, depth: 0.5 },
-    { height: 2, depth: 2 },
+    { height: 0.2, depth: 0.2 },
+    { height: 0.4, depth: 0.8 },
   ]);
   const [newRow, setNewRow] = useState({ height: '', depth: '' });
   const [animate, setAnimate] = useState(false);
