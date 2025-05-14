@@ -7,8 +7,15 @@ import './App.css';
 // Earth sphere with a crater (hemisphere subtraction illusion)
 function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDepth: number; craterRadius: number; showCrater: boolean }) {
   const earthRadius = 2;
-  const depth = Math.min(craterDepth / 100, earthRadius * 0.7); // Clamp for realism
-  const radius = Math.max(0.2, Math.min(craterRadius, earthRadius * 0.8));
+  // Use Earth's real diameter for clamping
+  // Earth's actual diameter in meters: 12742 km = 12,742,000 m
+  // In our scene, earthRadius = 2, so 1 unit = 6371 km = 6,371,000 m
+  // We'll set the max to 4x the real diameter in scene units
+  const earthDiameterMeters = 12742000;
+  const sceneUnitToMeters = earthDiameterMeters / (2 * earthRadius); // 1 scene unit = 3,185,500 m
+  const maxCrater = (earthDiameterMeters * 0.2) / sceneUnitToMeters; // 4x diameter in scene units
+  const depth = Math.max(0.01, Math.min(craterDepth / 100, maxCrater));
+  const radius = Math.max(0.01, Math.min(craterRadius, maxCrater));
 
   // Full hemisphere for the crater
   const fullHemisphereGeometry = useMemo(() => {
@@ -102,6 +109,19 @@ function extrapolateDepth(data: { height: number; depth: number }[], targetHeigh
   return Math.exp(intercept) * Math.pow(targetHeight, slope);
 }
 
+// Power law fit for crater radius based on height/depth data
+function extrapolateRadius(data: { height: number; depth: number }[], targetHeight: number) {
+  if (data.length < 2) return 0.7; // fallback
+  // Assume radius is proportional to (depth^a * height^b), fit log-log
+  // We'll use a simple model: radius = k * (depth^0.5)
+  // Fit k using the data
+  const radii = data.map(({ depth }) => Math.sqrt(depth));
+  const avgK = radii.reduce((a, b) => a + b, 0) / radii.length;
+  // Extrapolate using the predicted depth at targetHeight
+  const predictedDepth = extrapolateDepth(data, targetHeight);
+  return Math.max(0.2, avgK * Math.sqrt(predictedDepth));
+}
+
 function App() {
   const [data, setData] = useState([
     { height: 1, depth: 0.5 },
@@ -113,7 +133,7 @@ function App() {
   const [resetKey, setResetKey] = useState(0);
   const atmosphereHeight = 100000; // meters (100 km)
   const extrapolated = extrapolateDepth(data, atmosphereHeight);
-  const craterRadius = 0.7 + extrapolated * 0.01; // for visualization
+  const craterRadius = extrapolateRadius(data, atmosphereHeight); // for visualization
 
   return (
     <div className="container">
@@ -129,8 +149,39 @@ function App() {
         <tbody>
           {data.map((row, i) => (
             <tr key={i}>
-              <td>{row.height}</td>
-              <td>{row.depth}</td>
+              <td>
+                <input
+                  type="number"
+                  value={row.height}
+                  onChange={e => {
+                    const newData = [...data];
+                    newData[i] = { ...newData[i], height: Number(e.target.value) };
+                    setData(newData);
+                  }}
+                  min="0.01"
+                  step="any"
+                  style={{ width: 80 }}
+                />
+              </td>
+              <td>
+                <input
+                  type="number"
+                  value={row.depth}
+                  onChange={e => {
+                    const newData = [...data];
+                    newData[i] = { ...newData[i], depth: Number(e.target.value) };
+                    setData(newData);
+                  }}
+                  min="0.01"
+                  step="any"
+                  style={{ width: 80 }}
+                />
+              </td>
+              <td>
+                <button onClick={() => setData(data.filter((_, j) => j !== i))} style={{ background: '#a00' }}>
+                  Delete
+                </button>
+              </td>
             </tr>
           ))}
           <tr>
@@ -183,7 +234,7 @@ function App() {
         Estimated crater depth: <b>{(extrapolated / 100).toFixed(3)} m</b>
       </p>
       <div style={{ width: '100%', maxWidth: 600, height: 400, margin: 'auto', background: '#222', borderRadius: 8 }}>
-        <Canvas camera={{ position: [0, 6, 8], fov: 50 }} shadows>
+        <Canvas camera={{ position: [0, 6, 24], fov: 50 }} shadows>
           <ambientLight intensity={0.7} />
           <directionalLight position={[5, 10, 7]} intensity={1} castShadow />
           <EarthWithCrater craterDepth={extrapolated} craterRadius={craterRadius} showCrater={showCrater} />
@@ -199,7 +250,7 @@ function App() {
           </button>
         </div>
       </div>
-      <p style={{ fontSize: '0.9em', color: '#888', marginTop: 32 }}>
+      <p style={{ fontSize: '0.9em', color: '#888', marginTop: 80 }}>
         This extrapolation uses a power law fit to your data. For demonstration only.
       </p>
     </div>
