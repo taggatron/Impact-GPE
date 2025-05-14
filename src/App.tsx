@@ -231,7 +231,7 @@ function App() {
       </table>
       <h2>Extrapolated Impact from Edge of Atmosphere (100 km)</h2>
       <p>
-        Estimated crater depth: <b>{(extrapolated / 100).toFixed(3)} m</b>
+        Estimated crater depth: <b>{(extrapolated / 100000).toFixed(3)} km</b>
       </p>
       <div style={{ width: '100%', maxWidth: 600, height: 400, margin: 'auto', background: '#222', borderRadius: 8 }}>
         <Canvas camera={{ position: [0, 6, 24], fov: 50 }} shadows>
