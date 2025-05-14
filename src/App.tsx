@@ -80,9 +80,10 @@ function EarthWithCrater({
 
   // Linear hemisphere
   const fullHemisphereGeometryLinear = useMemo(() => {
-    const geo = new THREE.SphereGeometry(radiusLinear, 64, 64, 0, 2 * Math.PI, 0, Math.PI / 1);
+    const scaleRad = depthLinear/50
+    const geo = new THREE.SphereGeometry(scaleRad, 64, 64, 0, 2 * Math.PI, 0, Math.PI / 1);
     geo.rotateX(Math.PI);
-    geo.translate(0, earthRadius - depthLinear, 0);
+    geo.translate(0, earthRadius - scaleRad, 0);
     return geo;
   }, [radiusLinear, depthLinear]);
 
