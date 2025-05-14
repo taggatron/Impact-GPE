@@ -3,7 +3,6 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
-import React from 'react';
 
 // Earth sphere with a crater (hemisphere subtraction illusion)
 function EarthWithCrater({
@@ -400,11 +399,6 @@ function App() {
     fitType === 'power'
       ? extrapolateDepth(data, atmosphereHeight)
       : extrapolateDepthLinear(data, atmosphereHeight);
-
-  const craterRadius =
-    fitType === 'power'
-      ? extrapolateRadius(data, atmosphereHeight)
-      : extrapolateRadiusLinear(data, atmosphereHeight);
 
   // Always compute both for visualization
   const extrapolatedPower = extrapolateDepth(data, atmosphereHeight);
