@@ -1,6 +1,6 @@
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
-import { OrbitControls } from '@react-three/drei';
+import { OrbitControls, Text } from '@react-three/drei';
 import * as THREE from 'three';
 import './App.css';
 
@@ -13,9 +13,43 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
   // We'll set the max to 4x the real diameter in scene units
   const earthDiameterMeters = 12742000;
   const sceneUnitToMeters = earthDiameterMeters / (2 * earthRadius); // 1 scene unit = 3,185,500 m
-  const maxCrater = (earthDiameterMeters * 0.2) / sceneUnitToMeters; // 4x diameter in scene units
+  const maxCrater = (earthDiameterMeters * 10) / sceneUnitToMeters; // 4x diameter in scene units
   const depth = Math.max(0.01, Math.min(craterDepth / 100, maxCrater));
   const radius = Math.max(0.01, Math.min(craterRadius, maxCrater));
+
+  // Double-ended arrow for Earth's diameter (to the left of the sphere)
+  function Arrow({ start, end, color }: { start: [number, number, number]; end: [number, number, number]; color: string }) {
+    const dir = new THREE.Vector3(end[0] - start[0], end[1] - start[1], end[2] - start[2]);
+    const length = dir.length();
+    dir.normalize();
+    const arrowPos: [number, number, number] = [
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2,
+      (start[2] + end[2]) / 2,
+    ];
+    // Quaternion for orientation
+    const quaternion = new THREE.Quaternion();
+    quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir);
+    return (
+      <group position={arrowPos} quaternion={quaternion as any}>
+        {/* Shaft */}
+        <mesh>
+          <cylinderGeometry args={[0.025, 0.025, length - 0.3, 16]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Arrowhead bottom */}
+        <mesh position={[0, -(length / 2), 0]}>
+          <coneGeometry args={[0.07, 0.15, 16]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+        {/* Arrowhead top */}
+        <mesh position={[0, length / 2, 0]} rotation={[0, 0, Math.PI]}>
+          <coneGeometry args={[0.07, 0.15, 16]} />
+          <meshStandardMaterial color={color} />
+        </mesh>
+      </group>
+    );
+  }
 
   // Full hemisphere for the crater
   const fullHemisphereGeometry = useMemo(() => {
@@ -46,6 +80,26 @@ function EarthWithCrater({ craterDepth, craterRadius, showCrater }: { craterDept
 
   return (
     <group>
+      {/* Double-ended arrow and label for Earth's diameter */}
+      <group>
+        <Arrow
+          start={[-2.7, -earthRadius, 0]}
+          end={[-2.7, earthRadius, 0]}
+          color="#ffb347"
+        />
+        <Text
+          position={[-3.5, 0, 0]}
+          fontSize={0.5}
+          color="#ffb347"
+          anchorX="center"
+          anchorY="middle"
+          outlineColor="#000"
+          outlineWidth={0.02}
+          rotation={[0, 0, Math.PI / 2]}
+        >
+          {`Earth diameter: 12,742 km`}
+        </Text>
+      </group>
       {/* Earth sphere with translucency */}
       <mesh castShadow receiveShadow>
         <sphereGeometry args={[earthRadius, 64, 64]} />
