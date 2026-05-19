@@ -160,7 +160,7 @@ function EarthWithCrater({
           roughness={0.8} 
           side={THREE.DoubleSide} 
         />
-      </mesh>>
+      </mesh>
     </group>
   );
 }
